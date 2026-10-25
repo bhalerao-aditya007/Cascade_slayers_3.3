@@ -476,6 +476,21 @@ adb logcat -s TwinListener
 
 ---
 
+## 20. Related Work & How Attention Twin Differs
+
+While existing mobile wellbeing and notification research has explored parts of the attention problem, Attention Twin is architected around four distinct differentiators:
+
+1. **Cost-of-Interruption Model vs Static Priority**:
+   Prior work (e.g., SmartNotify, PrefMiner) ranks notifications by static priority levels (LOW/MEDIUM/HIGH) or predicts attendance alone (Pielot et al.). Attention Twin instead evaluates an **expected-cost tradeoff in phone minutes**: comparing what an interruption costs right now given user state (locked vs in active task app with resumption penalties) versus the cost of holding it until the next digest slot.
+2. **Counterfactual Prediction**:
+   Attention Twin simulates both futures live—the shown world and the held counterfactual world—and computes the attention harm saved (`cost_show − cost_hold`). With opt-in randomized holds, it estimates causal harm via Inverse Propensity Weighting (IPW) and bootstrap confidence intervals.
+3. **Auditable Receipts for Every Decision**:
+   Unlike black-box notification filters or silent DND schedulers, Attention Twin writes an immutable, auditable receipt for every decision with its one-line mathematical rationale, gating state, and complete lifecycle trace (`posted → snoozed → released → outcome`).
+4. **100% On-Device & Zero-Content Inspection**:
+   In stark contrast to cloud-based LLM triage systems (e.g., Notification-HQ) that ingest sensitive conversation bodies, Attention Twin operates without network access (`INTERNET` permission removed), never inspects message titles or text, and performs all Bayesian and SGD updates locally on the device.
+
+---
+
 <div align="center">
 
 **Built for Cascade '26 · The Attention Digital Twin**

@@ -5,6 +5,7 @@ local.properties
 *.iml
 .idea/
 *.apk
+!/release/AttentionTwin.apk
 *.aab
 *.dex
 *.class
