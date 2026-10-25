@@ -1,0 +1,20 @@
+# .gitignore
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+*.apk
+*.aab
+*.dex
+*.class
+*.log
+*.tmp
+*.bak
+*.swp
+*.jar
+!/gradle/wrapper/gradle-wrapper.jar
+.DS_Store
+.externalNativeBuild/
+.cxx/
+captures/

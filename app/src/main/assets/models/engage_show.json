@@ -1,0 +1,4 @@
+{"name":"engage_show","version":"prior-1","source":"placeholder",
+ "standardize":{"mean":[0,0,0,0,0,0,0],"std":[1,1,1,1,1,1,1]},
+ "coef":[0,0,0,0.15,0.45,-0.25,0.6,0.3,0.8,0.2,0.0,-0.2,0.3,0.1,-0.2,-0.3],
+ "intercept":-0.9,"metrics":{}}
