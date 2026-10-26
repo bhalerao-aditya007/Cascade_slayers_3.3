@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <!-- Safety: strip INTERNET even if a library tries to merge it in -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove"/>
     <queries>
@@ -25,12 +28,19 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <activity android:name=".ShieldActivity" android:exported="false"
+                  android:excludeFromRecents="true" android:launchMode="singleTask"/>
         <service android:name=".AttentionListener" android:exported="true"
                  android:label="Attention Twin"
                  android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService"/>
             </intent-filter>
+        </service>
+        <service android:name=".ShieldService" android:exported="false"
+                 android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                      android:value="focus_shield"/>
         </service>
         <provider
             android:name="androidx.core.content.FileProvider"
