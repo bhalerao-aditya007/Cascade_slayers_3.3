@@ -12,7 +12,6 @@ import com.cascade.attentiontwin.data.Mode
 import com.cascade.attentiontwin.data.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import java.util.Calendar
 import java.util.Random
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -87,53 +86,40 @@ class Engine(
     fun onPosted(f: NotifFeatures, enf: Enforcer) {
         val now = System.currentTimeMillis()
 
-        // 2. Ignore internal and group summaries
-        if (f.channelId == "twin_internal" || f.isGroupSummary) {
+        // Ignore our own relay / service notifications and group summaries
+        if (f.channelId?.startsWith("twin_internal") == true || f.isGroupSummary) {
             return
         }
 
-        // 3. Re-post of a held key
+        // Re-post of a held key
         val releaseAt = heldKeys[f.key]
         if (releaseAt != null) {
             if (now >= releaseAt - 5000L) {
                 heldKeys.remove(f.key)
-                ioScope.launch {
-                    db.dao().markReleased(f.key, now)
-                }
+                ioScope.launch { db.dao().markReleased(f.key, now) }
             } else {
                 Log.d(tag, "Update while held: ${f.key}")
             }
             return
         }
 
-        // 4. Group and stats
         val group = groups.groupOf(f.pkg, f.channelId)
         val st = getOrCreateStat(f, group)
 
-        // 5. Context
         val ownPkg = context.packageName
         val ctx = contextTracker.build(now, f.pkg, ownPkg)
         contextTracker.recordNotification(now)
 
         val s = prefs.current
 
-        // 6. Gate 0: Focus Active check
+        // Gate 0: Focus
         val d: Decision
         if (!s.focusActive) {
             d = Decision(
-                hold = false,
-                gate = "FOCUS_OFF",
-                reason = "Focus is off; learning only.",
-                pImpMean = 0.0,
-                pImpUp = 0.0,
-                pShow = 0.0,
-                pCtrl = 0.0,
-                costShow = 0.0,
-                costHold = 0.0,
-                benefit = 0.0,
-                randomized = false,
-                propensityHold = 0.0,
-                phoneState = ctx.state
+                hold = false, gate = "FOCUS_OFF", reason = "Focus is off; learning only.",
+                pImpMean = 0.0, pImpUp = 0.0, pShow = 0.0, pCtrl = 0.0,
+                costShow = 0.0, costHold = 0.0, benefit = 0.0,
+                randomized = false, propensityHold = 0.0, phoneState = ctx.state
             )
         } else {
             val hourBlock = (ctx.hour / 4).coerceIn(0, 5)
@@ -143,7 +129,7 @@ class Engine(
             d = Policy.decide(f, group, ctx, st, s, models, personalCtrl, muS, rnd)
         }
 
-        // 8. Enforce
+        // Enforce
         var enforcement = "none"
         var finalHold = d.hold
         var releaseTime: Long? = null
@@ -151,7 +137,12 @@ class Engine(
         if (d.hold) {
             when (s.mode) {
                 Mode.SNOOZE -> {
-                    val (relAt, duration) = Policy.digestRelease(now, s.maxHoldMin, s.digestMin)
+                    // Demo mode: short 20 s hold so the audience sees the full cycle.
+                    val (relAt, duration) = if (s.demoMode) {
+                        (now + 20_000L) to 20_000L
+                    } else {
+                        Policy.digestRelease(now, s.maxHoldMin, s.digestMin)
+                    }
                     releaseTime = relAt
                     val ok = enf.snooze(f.key, duration)
                     if (ok) {
@@ -162,7 +153,6 @@ class Engine(
                         finalHold = false
                     }
 
-                    // 2-second delayed check on main Handler
                     mainHandler.postDelayed({
                         if (enf.stillActive(f.key)) {
                             Log.w(tag, "Snooze failed: key still active after 2s: ${f.key}")
@@ -178,9 +168,7 @@ class Engine(
                         }
                     }, 2000L)
                 }
-                Mode.SHADOW -> {
-                    enforcement = "none"
-                }
+                Mode.SHADOW -> enforcement = "none"
                 Mode.DND_ONLY -> {
                     enforcement = "none"
                     Log.d(tag, "DND_ONLY mode: would hold ${f.key}")
@@ -188,27 +176,26 @@ class Engine(
             }
         }
 
-        // 9. Increment nSeen
+        // Quiet layer: DND silences protected notifications too, so relay them (app name only).
+        if (s.focusActive && s.silenceWhileFocused && !finalHold && d.gate == "PROTECTED" &&
+            !f.ongoing && !f.isForegroundService &&
+            f.category != "call" && f.category != "alarm" &&
+            ctx.state != PhoneState.IN_SOURCE_APP
+        ) {
+            FocusController.relayProtected(context, f.pkg)
+        }
+
         st.nSeen++
 
-        // 10. Async persist event and decision
         val future = CompletableFuture<Long>()
         idByKey[f.key] = future
 
         val source = if (f.pkg == ownPkg) "sim" else "real"
         ioScope.launch {
             val eventRow = EventRow(
-                key = f.key,
-                pkg = f.pkg,
-                channelId = f.channelId,
-                channelName = f.channelName,
-                appGroup = group,
-                category = f.category,
-                importance = f.importance,
-                isConversation = f.isConversation,
-                ongoing = f.ongoing,
-                postTs = now,
-                source = source
+                key = f.key, pkg = f.pkg, channelId = f.channelId, channelName = f.channelName,
+                appGroup = group, category = f.category, importance = f.importance,
+                isConversation = f.isConversation, ongoing = f.ongoing, postTs = now, source = source
             )
             val eventId = db.dao().insertEvent(eventRow)
 
@@ -241,9 +228,7 @@ class Engine(
             future.complete(eventId)
 
             mainHandler.postDelayed({
-                ioScope.launch {
-                    outcomes.close(eventId)
-                }
+                ioScope.launch { outcomes.close(eventId) }
             }, 10 * 60_000L)
         }
     }
@@ -252,9 +237,7 @@ class Engine(
         val future = idByKey[key]
         if (future != null) {
             future.thenAcceptAsync({ eventId ->
-                ioScope.launch {
-                    db.dao().setRemoval(eventId, reason, now)
-                }
+                ioScope.launch { db.dao().setRemoval(eventId, reason, now) }
             }, { ioScope.launch { it.run() } })
         }
     }
@@ -276,25 +259,14 @@ class Engine(
 
     fun whatIf(ctx: Ctx, f: NotifFeatures, group: String): WhatIfResult {
         val cacheKey = "${f.pkg}|${f.channelId ?: ""}"
-        val st = statCache[cacheKey] ?: db.dao().let {
-            // Synchronous fallback from memory or prior
+        val st = statCache[cacheKey] ?: run {
             val beta = Policy.priorBeta(f, group)
             val poolPrior = POOL_PRIOR[group] ?: (3.0 to 3.0)
             ChannelStat(
-                pkg = f.pkg,
-                channelId = f.channelId ?: "",
-                group = group,
-                a = beta.a,
-                b = beta.b,
-                nSeen = 10,
-                nEngaged = 3,
-                mu = poolPrior.first,
-                varPull = poolPrior.second * poolPrior.second,
-                nPull = 3,
-                bShow = 0.0,
-                pSwitch = 0.3,
-                prot = false,
-                never = false
+                pkg = f.pkg, channelId = f.channelId ?: "", group = group,
+                a = beta.a, b = beta.b, nSeen = 10, nEngaged = 3,
+                mu = poolPrior.first, varPull = poolPrior.second * poolPrior.second,
+                nPull = 3, bShow = 0.0, pSwitch = 0.3, prot = false, never = false
             )
         }
 
@@ -305,34 +277,24 @@ class Engine(
         val muS = ctrlTracker.muS()
 
         val d = Policy.decide(f, group, ctx, st, s, models, personalCtrl, muS, rnd)
-        val costBreakdown = Policy.costs(f, group, ctx, st, models, personalCtrl, muS)
+        val cb = Policy.costs(f, group, ctx, st, models, personalCtrl, muS)
 
-        val harm = costBreakdown.costShow - costBreakdown.costHold
+        val harm = cb.costShow - cb.costHold
 
-        // Variance calculation for 80% range bar: Var = p * sigma^2 + p * (1 - p) * mu^2
         val sigmaShow = Math.sqrt(st.varPull)
-        val varShow = costBreakdown.pShow * (sigmaShow * sigmaShow) +
-                costBreakdown.pShow * (1.0 - costBreakdown.pShow) * (st.mu * st.mu)
+        val varShow = cb.pShow * (sigmaShow * sigmaShow) + cb.pShow * (1.0 - cb.pShow) * (st.mu * st.mu)
         val sigmaHold = 3.0
-        val varHold = costBreakdown.pCtrl * (sigmaHold * sigmaHold) +
-                costBreakdown.pCtrl * (1.0 - costBreakdown.pCtrl) * (muS * muS)
+        val varHold = cb.pCtrl * (sigmaHold * sigmaHold) + cb.pCtrl * (1.0 - cb.pCtrl) * (muS * muS)
         val harmSd = Math.sqrt(varShow + varHold)
 
         val resumePenalty = if (ctx.fgGroup == "productivity") 3.0 else 1.5
 
         return WhatIfResult(
-            decision = d,
-            channelStat = st,
-            costShow = costBreakdown.costShow,
-            costHold = costBreakdown.costHold,
-            harm = harm,
-            harmSd = harmSd,
-            pEngageShow = costBreakdown.pShow,
-            pullMinutesShow = st.mu,
-            resumePenaltyShow = resumePenalty,
-            pPickupHold = costBreakdown.pCtrl,
-            pullMinutesHold = muS,
-            tau = s.strictness.tau
+            decision = d, channelStat = st,
+            costShow = cb.costShow, costHold = cb.costHold,
+            harm = harm, harmSd = harmSd,
+            pEngageShow = cb.pShow, pullMinutesShow = st.mu, resumePenaltyShow = resumePenalty,
+            pPickupHold = cb.pCtrl, pullMinutesHold = muS, tau = s.strictness.tau
         )
     }
 }
