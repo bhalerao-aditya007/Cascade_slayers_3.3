@@ -1,18 +1,17 @@
 package com.cascade.attentiontwin.ui
 
 import android.app.Application
-import android.content.Context
+import android.content.Intent
+import android.provider.Settings as AndroidSettings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cascade.attentiontwin.Graph
-import com.cascade.attentiontwin.data.ChannelStat
-import com.cascade.attentiontwin.data.DecisionRow
+import com.cascade.attentiontwin.ShieldService
 import com.cascade.attentiontwin.data.Mode
-import com.cascade.attentiontwin.data.ReceiptView
 import com.cascade.attentiontwin.data.Settings
 import com.cascade.attentiontwin.data.TodayCounts
 import com.cascade.attentiontwin.engine.Ctx
-import com.cascade.attentiontwin.engine.Effect
+import com.cascade.attentiontwin.engine.FocusController
 import com.cascade.attentiontwin.engine.PhoneState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,18 +56,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _currentCtx = MutableStateFlow(
         Ctx(
-            nowMs = System.currentTimeMillis(),
-            hour = 12,
-            weekend = false,
-            notifs30 = 0,
-            unlocks30 = 0,
-            minsSinceUnlock = 600.0,
-            screenOn = true,
-            state = PhoneState.LOCKED,
-            fgPkg = null,
-            fgGroup = null,
-            usageKnown = false,
-            waitingForCode = false
+            nowMs = System.currentTimeMillis(), hour = 12, weekend = false, notifs30 = 0, unlocks30 = 0,
+            minsSinceUnlock = 600.0, screenOn = true, state = PhoneState.LOCKED, fgPkg = null,
+            fgGroup = null, usageKnown = false, waitingForCode = false
         )
     )
     val currentCtx: StateFlow<Ctx> = _currentCtx.asStateFlow()
@@ -77,24 +67,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val insightsData: StateFlow<InsightsData> = _insightsData.asStateFlow()
 
     val receiptsFlow = Graph.db.dao().receiptsFlow(null).stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
     val heldListFlow = Graph.db.dao().heldNowFlow(System.currentTimeMillis()).stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
     val channelStatsFlow = Graph.db.dao().allChannelStatsFlow().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
     init {
+        // Re-sync quiet/shield layers if the process was restarted mid-focus.
+        applyFocusLayers(prefs.current.focusActive)
         startPolling()
     }
 
@@ -110,8 +96,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun applyFocusLayers(on: Boolean) {
+        val s = prefs.current
+        if (s.silenceWhileFocused && on) FocusController.enter(context) else FocusController.exit(context)
+        val svc = Intent(context, ShieldService::class.java)
+        if (on && s.shieldEnabled && AndroidSettings.canDrawOverlays(context)) {
+            try { context.startForegroundService(svc) } catch (_: Exception) {}
+        } else {
+            context.stopService(svc)
+        }
+    }
+
     fun toggleFocus() {
-        prefs.update { copy(focusActive = !focusActive) }
+        val on = !prefs.current.focusActive
+        prefs.update { copy(focusActive = on) }
+        applyFocusLayers(on)
+    }
+
+    /** Called when a Focus-tool setting changes while focus is already running. */
+    fun refreshFocusLayers() {
+        if (prefs.current.focusActive) applyFocusLayers(true)
     }
 
     fun submitFeedback(eventId: Long, kind: String) {
@@ -120,6 +124,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteAllData() {
         viewModelScope.launch {
+            applyFocusLayers(false)
             Graph.db.clearAllTables()
             Graph.statCache.clear()
             Graph.engine.heldKeys.clear()
@@ -141,7 +146,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _status.value = TwinStatus(
                 listenerConnected = listenerOk,
                 usageGranted = usageOk,
-                policyGranted = false,
+                policyGranted = FocusController.policyGranted(context),
                 focusActive = s.focusActive,
                 mode = s.mode,
                 totalSeen = seen
@@ -151,20 +156,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun refreshTodayCounts() {
         val cal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }
-        val startOfDay = cal.timeInMillis
-        val counts = Graph.db.dao().todayCounts(startOfDay)
-        _todayCounts.value = counts
+        _todayCounts.value = Graph.db.dao().todayCounts(cal.timeInMillis)
     }
 
     private fun refreshCtx() {
         val now = System.currentTimeMillis()
-        val ctx = Graph.contextTracker.build(now, context.packageName, context.packageName)
-        _currentCtx.value = ctx
+        _currentCtx.value = Graph.contextTracker.build(now, context.packageName, context.packageName)
     }
 
     private suspend fun refreshInsights() {
@@ -174,7 +174,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val topCh = Graph.db.dao().topChannelsByPhoneMin(5)
         val stats = Graph.db.dao().allChannelStats()
 
-        // Fragmentation: app group -> sum of (nEngaged * mu)
         val fragMap = mutableMapOf<String, Float>()
         for (st in stats) {
             val pull = (st.nEngaged * st.mu).toFloat()
@@ -182,14 +181,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             fragMap[key] = (fragMap[key] ?: 0f) + pull
         }
         val fragList = fragMap.map { Triple(it.key, "engaged × pull", it.value) }
-            .sortedByDescending { it.third }
-            .take(5)
+            .sortedByDescending { it.third }.take(5)
 
-        val cal = Calendar.getInstance().apply { timeInMillis = now }
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val isLate = hour >= 22
-
-        // Best focus hours
+        val hour = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY)
         val unlocks = Graph.db.dao().recentUnlocks(now - 7 * 24 * 60 * 60_000L)
         val bestHours = if (unlocks.size >= 10) listOf(9, 10, 14) else emptyList()
 
@@ -200,7 +194,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             bestFocusHours = bestHours,
             maxScreenMinToday = 45.0,
             unlocksPerHour = (unlocks.size.toDouble() / 24.0).coerceAtLeast(0.0),
-            isLateHour = isLate,
+            isLateHour = hour >= 22,
             totalObservations = stats.sumOf { it.nSeen }
         )
     }
