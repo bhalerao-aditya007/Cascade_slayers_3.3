@@ -26,7 +26,10 @@ data class Settings(
     val learningPaused: Boolean = false,
     val includeDemo: Boolean = false,
     val simForceLocked: Boolean = false,
-    val onboarded: Boolean = false
+    val onboarded: Boolean = false,
+    val demoMode: Boolean = false,
+    val shieldEnabled: Boolean = false,
+    val shieldPkgs: Set<String> = emptySet()
 )
 
 class Prefs(context: Context) {
@@ -45,11 +48,14 @@ class Prefs(context: Context) {
         experiments = sp.getBoolean("experiments", false),
         epsilon = sp.getFloat("epsilon", 0.10f).toDouble(),
         allowHoldChats = sp.getBoolean("allowHoldChats", false),
-        neverHoldPkgs = sp.getStringSet("neverHoldPkgs", emptySet()) ?: emptySet(),
+        neverHoldPkgs = sp.getStringSet("neverHoldPkgs", emptySet())?.toSet() ?: emptySet(),
         learningPaused = sp.getBoolean("learningPaused", false),
         includeDemo = sp.getBoolean("includeDemo", false),
         simForceLocked = sp.getBoolean("simForceLocked", false),
-        onboarded = sp.getBoolean("onboarded", false)
+        onboarded = sp.getBoolean("onboarded", false),
+        demoMode = sp.getBoolean("demoMode", false),
+        shieldEnabled = sp.getBoolean("shieldEnabled", false),
+        shieldPkgs = sp.getStringSet("shieldPkgs", emptySet())?.toSet() ?: emptySet()
     )
 
     fun update(fn: Settings.() -> Settings) {
@@ -69,6 +75,9 @@ class Prefs(context: Context) {
             putBoolean("includeDemo", s.includeDemo)
             putBoolean("simForceLocked", s.simForceLocked)
             putBoolean("onboarded", s.onboarded)
+            putBoolean("demoMode", s.demoMode)
+            putBoolean("shieldEnabled", s.shieldEnabled)
+            putStringSet("shieldPkgs", s.shieldPkgs)
             apply()
         }
         _flow.value = s
