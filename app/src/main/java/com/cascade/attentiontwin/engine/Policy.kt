@@ -209,7 +209,7 @@ object Policy {
             )
         }
 
-        if (st.nSeen < 3) {
+        if (st.nSeen < 3 && !s.demoMode) {
             return Decision(
                 hold = false,
                 gate = "COLD_START",

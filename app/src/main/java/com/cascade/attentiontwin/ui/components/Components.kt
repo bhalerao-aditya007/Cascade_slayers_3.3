@@ -60,6 +60,7 @@ import com.cascade.attentiontwin.ui.theme.Cyan
 import com.cascade.attentiontwin.ui.theme.GlassBgBottom
 import com.cascade.attentiontwin.ui.theme.GlassBgTop
 import com.cascade.attentiontwin.ui.theme.HoldGreen
+import com.cascade.attentiontwin.ui.theme.Surface1
 import com.cascade.attentiontwin.ui.theme.ProtectedBlue
 import com.cascade.attentiontwin.ui.theme.ShowCoral
 import com.cascade.attentiontwin.ui.theme.Surface2
@@ -81,12 +82,9 @@ fun GlassCard(
     Column(
         modifier = modifier
             .clip(shape)
-            .background(
-                Brush.verticalGradient(
-                    listOf(GlassBgTop, GlassBgBottom)
-                )
+            .background(Surface1)
             )
-            .border(1.dp, CardBorder, shape)
+
             .padding(16.dp),
         content = content
     )
