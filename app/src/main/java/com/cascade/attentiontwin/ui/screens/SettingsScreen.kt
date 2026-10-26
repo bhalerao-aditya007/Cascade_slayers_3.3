@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteForever
@@ -62,6 +61,7 @@ import com.cascade.attentiontwin.data.Mode
 import com.cascade.attentiontwin.data.Strictness
 import com.cascade.attentiontwin.engine.FocusController
 import com.cascade.attentiontwin.ui.MainViewModel
+import com.cascade.attentiontwin.ui.components.AppPickerDialog
 import com.cascade.attentiontwin.ui.components.GlassCard
 import com.cascade.attentiontwin.ui.theme.CardBorder
 import com.cascade.attentiontwin.ui.theme.Cyan
@@ -84,6 +84,7 @@ fun SettingsScreen(
     val settings by viewModel.settingsFlow.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showShieldPicker by remember { mutableStateOf(false) }
+    var showBlockPicker by remember { mutableStateOf(false) }
 
     // Re-check special permissions whenever we return from system settings.
     var permTick by remember { mutableIntStateOf(0) }
@@ -112,9 +113,13 @@ fun SettingsScreen(
                 Text("Focus tools", style = MaterialTheme.typography.titleMedium, color = TextHi)
                 Spacer(Modifier.height(8.dp))
 
+                PermissionLink("Choose apps to block notifications for (${settings.blockedPkgs.size})") {
+                    showBlockPicker = true
+                }
+
                 SettingToggleRow(
                     title = "Silence while focused",
-                    subtitle = "Do Not Disturb on during focus. Protected alerts still ring.",
+                    subtitle = "Do Not Disturb on during focus. Suppresses heads-up popups.",
                     checked = settings.silenceWhileFocused,
                     onCheckedChange = {
                         viewModel.prefs.update { copy(silenceWhileFocused = it) }
@@ -149,7 +154,7 @@ fun SettingsScreen(
                             context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
                         }
                     }
-                    PermissionLink("Choose apps (${settings.shieldPkgs.size})") { showShieldPicker = true }
+                    PermissionLink("Choose shielded apps (${settings.shieldPkgs.size})") { showShieldPicker = true }
                 }
 
                 SettingToggleRow(
@@ -236,7 +241,7 @@ fun SettingsScreen(
                 Text("Preferences", style = MaterialTheme.typography.titleMedium, color = TextHi)
                 Spacer(Modifier.height(6.dp))
                 SettingToggleRow(
-                    "Allow holding chats", "Off by default. Conversations stay protected.",
+                    "Allow holding chats", "Hold conversational messages from messaging apps.",
                     settings.allowHoldChats
                 ) { viewModel.prefs.update { copy(allowHoldChats = it) } }
                 SettingToggleRow(
@@ -332,9 +337,24 @@ fun SettingsScreen(
         )
     }
 
+    if (showBlockPicker) {
+        AppPickerDialog(
+            initialSelected = settings.blockedPkgs,
+            title = "Apps to Block Notifications For",
+            subtitle = "Notifications from checked apps will be held while Focus is active.",
+            onDismiss = { showBlockPicker = false },
+            onSave = { picked ->
+                viewModel.prefs.update { copy(blockedPkgs = picked) }
+                showBlockPicker = false
+            }
+        )
+    }
+
     if (showShieldPicker) {
-        ShieldPickerDialog(
-            initial = settings.shieldPkgs,
+        AppPickerDialog(
+            initialSelected = settings.shieldPkgs,
+            title = "Apps to Pause with Focus Shield",
+            subtitle = "Opening checked apps while focus is active will bounce to the Focus screen.",
             onDismiss = { showShieldPicker = false },
             onSave = { picked ->
                 viewModel.prefs.update { copy(shieldPkgs = picked) }
@@ -342,58 +362,6 @@ fun SettingsScreen(
             }
         )
     }
-}
-
-@Composable
-private fun ShieldPickerDialog(
-    initial: Set<String>,
-    onDismiss: () -> Unit,
-    onSave: (Set<String>) -> Unit
-) {
-    val context = LocalContext.current
-    val pm = context.packageManager
-    val apps = remember {
-        val i = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
-        pm.queryIntentActivities(i, 0)
-            .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
-            .filter { it.first != context.packageName }
-            .distinctBy { it.first }
-            .sortedBy { it.second.lowercase() }
-    }
-    // First time: pre-tick social and video apps.
-    var picked by remember {
-        mutableStateOf(
-            if (initial.isNotEmpty()) initial
-            else apps.filter { Graph.groups.groupOf(it.first, null) in setOf("social", "video") }
-                .map { it.first }.toSet()
-        )
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Surface1,
-        title = { Text("Apps to pause during focus", color = TextHi) },
-        text = {
-            LazyColumn(Modifier.height(380.dp)) {
-                items(apps) { (pkg, label) ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(label, color = TextHi, modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = pkg in picked,
-                            onCheckedChange = { picked = if (it) picked + pkg else picked - pkg },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Cyan, checkedTrackColor = Cyan.copy(alpha = 0.35f))
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSave(picked) }) { Text("Save", color = Cyan) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextLo) } }
-    )
 }
 
 @Composable

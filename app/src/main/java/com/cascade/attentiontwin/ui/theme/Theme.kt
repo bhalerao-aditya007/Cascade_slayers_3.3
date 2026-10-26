@@ -18,20 +18,21 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Cyan,
-    onPrimary = Bg,
+    primary = ElectricViolet,
+    onPrimary = MidnightNavy,
     primaryContainer = Surface2,
     onPrimaryContainer = TextHi,
-    secondary = HoldGreen,
-    onSecondary = Bg,
-    background = Bg,
+    secondary = NeonBlue,
+    onSecondary = MidnightNavy,
+    tertiary = SoftLavender,
+    background = MidnightNavy,
     onBackground = TextHi,
     surface = Surface1,
     onSurface = TextHi,
     surfaceVariant = Surface2,
     onSurfaceVariant = TextLo,
     error = ShowCoral,
-    onError = Bg
+    onError = MidnightNavy
 )
 
 val TwinShapes = Shapes(
@@ -45,9 +46,9 @@ val TwinShapes = Shapes(
 val TwinTypography = Typography(
     headlineLarge = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 30.sp,
-        lineHeight = 36.sp,
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp,
+        lineHeight = 38.sp,
         color = TextHi
     ),
     headlineMedium = TextStyle(
@@ -118,8 +119,8 @@ fun AttentionTwinTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = Bg.toArgb()
-                window.navigationBarColor = Bg.toArgb()
+                window.statusBarColor = MidnightNavy.toArgb()
+                window.navigationBarColor = MidnightNavy.toArgb()
                 val controller = WindowCompat.getInsetsController(window, view)
                 controller.isAppearanceLightStatusBars = false
                 controller.isAppearanceLightNavigationBars = false

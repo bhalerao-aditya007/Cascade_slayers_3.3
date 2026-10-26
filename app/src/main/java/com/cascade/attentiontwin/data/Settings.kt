@@ -18,11 +18,12 @@ data class Settings(
     val digestMin: Int = 15,
     val mode: Mode = Mode.SNOOZE,
     val focusActive: Boolean = false,
-    val silenceWhileFocused: Boolean = false,
+    val silenceWhileFocused: Boolean = true,
     val experiments: Boolean = false,
     val epsilon: Double = 0.10,
-    val allowHoldChats: Boolean = false,
+    val allowHoldChats: Boolean = true,
     val neverHoldPkgs: Set<String> = emptySet(),
+    val blockedPkgs: Set<String> = emptySet(),
     val learningPaused: Boolean = false,
     val includeDemo: Boolean = false,
     val simForceLocked: Boolean = false,
@@ -44,11 +45,12 @@ class Prefs(context: Context) {
         digestMin = sp.getInt("digestMin", 15),
         mode = try { Mode.valueOf(sp.getString("mode", "SNOOZE")!!) } catch (_: Exception) { Mode.SNOOZE },
         focusActive = sp.getBoolean("focusActive", false),
-        silenceWhileFocused = sp.getBoolean("silenceWhileFocused", false),
+        silenceWhileFocused = sp.getBoolean("silenceWhileFocused", true),
         experiments = sp.getBoolean("experiments", false),
         epsilon = sp.getFloat("epsilon", 0.10f).toDouble(),
-        allowHoldChats = sp.getBoolean("allowHoldChats", false),
+        allowHoldChats = sp.getBoolean("allowHoldChats", true),
         neverHoldPkgs = sp.getStringSet("neverHoldPkgs", emptySet())?.toSet() ?: emptySet(),
+        blockedPkgs = sp.getStringSet("blockedPkgs", emptySet())?.toSet() ?: emptySet(),
         learningPaused = sp.getBoolean("learningPaused", false),
         includeDemo = sp.getBoolean("includeDemo", false),
         simForceLocked = sp.getBoolean("simForceLocked", false),
@@ -71,6 +73,7 @@ class Prefs(context: Context) {
             putFloat("epsilon", s.epsilon.toFloat())
             putBoolean("allowHoldChats", s.allowHoldChats)
             putStringSet("neverHoldPkgs", s.neverHoldPkgs)
+            putStringSet("blockedPkgs", s.blockedPkgs)
             putBoolean("learningPaused", s.learningPaused)
             putBoolean("includeDemo", s.includeDemo)
             putBoolean("simForceLocked", s.simForceLocked)

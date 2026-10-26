@@ -3,6 +3,7 @@ package com.cascade.attentiontwin.engine
 import com.cascade.attentiontwin.data.ChannelStat
 import com.cascade.attentiontwin.data.Mode
 import com.cascade.attentiontwin.data.Settings
+import com.cascade.attentiontwin.data.Strictness
 import java.util.Locale
 import java.util.Random
 
@@ -126,9 +127,14 @@ object Policy {
         if (keywordHit(f, PROTECT_KEYWORDS)) {
             return "Protected: security channel."
         }
-        if (looksConversational(f) && !s.allowHoldChats) {
-            return "Protected: conversation (chats are protected)."
+
+        // If app is explicitly marked to be blocked in Focus mode, do NOT protect as conversation
+        if (f.pkg !in s.blockedPkgs) {
+            if (looksConversational(f) && !s.allowHoldChats) {
+                return "Protected: conversation (chats are protected)."
+            }
         }
+
         if (ctx.state == PhoneState.IN_SOURCE_APP) {
             return "Protected: you are in the sending app."
         }
@@ -209,7 +215,26 @@ object Policy {
             )
         }
 
-        if (st.nSeen < 3 && !s.demoMode) {
+        // Explicitly blocked apps for focus: ALWAYS HOLD
+        if (f.pkg in s.blockedPkgs) {
+            return Decision(
+                hold = true,
+                gate = "BLOCKED_APP",
+                reason = "Blocked: app is in focus block list.",
+                pImpMean = 0.1,
+                pImpUp = 0.2,
+                pShow = 0.9,
+                pCtrl = 0.1,
+                costShow = 4.0,
+                costHold = 0.3,
+                benefit = 3.7,
+                randomized = false,
+                propensityHold = 1.0,
+                phoneState = c.state
+            )
+        }
+
+        if (st.nSeen < 3 && !s.demoMode && s.strictness != Strictness.STRICT) {
             return Decision(
                 hold = false,
                 gate = "COLD_START",

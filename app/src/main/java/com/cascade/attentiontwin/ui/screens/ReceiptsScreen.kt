@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,18 +38,31 @@ import com.cascade.attentiontwin.ui.MainViewModel
 import com.cascade.attentiontwin.ui.components.GlassCard
 import com.cascade.attentiontwin.ui.components.ReceiptCard
 import com.cascade.attentiontwin.ui.theme.CardBorder
-import com.cascade.attentiontwin.ui.theme.Cyan
+import com.cascade.attentiontwin.ui.theme.ElectricViolet
+import com.cascade.attentiontwin.ui.theme.NeonBlue
+import com.cascade.attentiontwin.ui.theme.Surface1
 import com.cascade.attentiontwin.ui.theme.Surface2
 import com.cascade.attentiontwin.ui.theme.TextHi
 import com.cascade.attentiontwin.ui.theme.TextLo
 
 @Composable
-fun ReceiptsScreen(viewModel: MainViewModel) {
+fun ReceiptsScreen(
+    viewModel: MainViewModel,
+    initialFilter: String? = null
+) {
     val receipts by viewModel.receiptsFlow.collectAsState()
     val settings by viewModel.settingsFlow.collectAsState()
 
     val filterOptions = listOf("All", "Held", "Shown", "Protected", "Failed")
-    var selectedFilter by remember { mutableStateOf("All") }
+    var selectedFilter by remember(initialFilter) {
+        mutableStateOf(
+            when (initialFilter) {
+                "SHOW" -> "Shown"
+                "HOLD" -> "Held"
+                else -> initialFilter ?: "All"
+            }
+        )
+    }
 
     val filteredList = receipts.filter { receipt ->
         val simAllowed = settings.includeDemo || receipt.source != "sim"
@@ -73,7 +86,8 @@ fun ReceiptsScreen(viewModel: MainViewModel) {
                 Text(
                     text = "Receipts",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = TextHi
+                    color = TextHi,
+                    fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -95,8 +109,8 @@ fun ReceiptsScreen(viewModel: MainViewModel) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
-                            .background(if (isSelected) Cyan.copy(alpha = 0.2f) else Surface2)
-                            .border(1.dp, if (isSelected) Cyan else CardBorder, RoundedCornerShape(14.dp))
+                            .background(if (isSelected) ElectricViolet.copy(alpha = 0.2f) else Surface2)
+                            .border(1.dp, if (isSelected) ElectricViolet else CardBorder, RoundedCornerShape(14.dp))
                             .clickable { selectedFilter = filter }
                             .padding(horizontal = 14.dp, vertical = 7.dp)
                     ) {
@@ -104,7 +118,7 @@ fun ReceiptsScreen(viewModel: MainViewModel) {
                             text = filter,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) Cyan else TextHi
+                            color = if (isSelected) ElectricViolet else TextHi
                         )
                     }
                 }
@@ -121,7 +135,7 @@ fun ReceiptsScreen(viewModel: MainViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.ReceiptLong,
+                            imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
                             contentDescription = null,
                             tint = TextLo,
                             modifier = Modifier.size(36.dp)

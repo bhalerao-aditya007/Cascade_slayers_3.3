@@ -176,6 +176,24 @@ class PolicyTest {
     }
 
     @Test
+    fun blockedAppAlwaysHeld() {
+        val f = testNotif(isConversation = true, hasReplyAction = true)
+        val s = testSettings().copy(blockedPkgs = setOf("com.test.app"))
+        val d = Policy.decide(f, "messaging", testCtx(), testStat(nSeen = 0), s, testModels(), null, 3.0, Random(42))
+        assertTrue("Blocked app should be held immediately even if conversation or cold start", d.hold)
+        assertEquals("BLOCKED_APP", d.gate)
+    }
+
+    @Test
+    fun blockedAppCallStillProtected() {
+        val f = testNotif(category = "call")
+        val s = testSettings().copy(blockedPkgs = setOf("com.test.app"))
+        val d = Policy.decide(f, "other", testCtx(), testStat(), s, testModels(), null, 3.0, Random(42))
+        assertFalse("Incoming call should never be held even if app is in blocked list", d.hold)
+        assertEquals("PROTECTED", d.gate)
+    }
+
+    @Test
     fun noInternetNoContent() {
         val banned = listOf(
             "EXTRA_TITLE", "EXTRA_TEXT", "EXTRA_BIG_TEXT", "EXTRA_MESSAGES", "EXTRA_SUB_TEXT",
