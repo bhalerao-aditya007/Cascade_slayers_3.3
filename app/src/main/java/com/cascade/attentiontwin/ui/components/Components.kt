@@ -83,8 +83,6 @@ fun GlassCard(
         modifier = modifier
             .clip(shape)
             .background(Surface1)
-            )
-
             .padding(16.dp),
         content = content
     )
